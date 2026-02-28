@@ -1,110 +1,122 @@
-"""
-
-Content-Based Filtering using TF-IDF on product text features.
-
-"""
-
 import pandas as pd
-import numpy as np
+import logging
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-import logging
+from sqlalchemy import text
 
+# ── Logging ─────────────
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 
-# ── Step 1: Load Product Catalog ─────────────────────────────────────────────
+# ── Step 1: Data Loader ───────────────────────────────────────────────────────
 
-def load_product_catalog(engine) -> pd.DataFrame:
+def load_product_catalog(engine):
+    """Loads all products from the amazon_products table for content analysis."""
     logger.info("Loading product catalog ...")
-    df = pd.read_sql("""
-        SELECT 
-            asin        AS product_id,
-            title,
-            category_id,
-            stars       AS avg_rating,
-            reviews     AS total_reviews,
-            price
-        FROM amazon_products
-        WHERE title IS NOT NULL
-    """, engine)
+    query = "SELECT asin, title, category_id, stars, reviews, img_url, price FROM amazon_products"
+    with engine.connect() as conn:
+        df = pd.read_sql(text(query), conn)
     logger.info(f" → {len(df):,} products loaded")
     return df
 
 
-# ── Step 2: Build TF-IDF Matrix ──────────────────────────────────────────────
+# ── Step 2: TF-IDF Pipeline ───────────────────────────────────────────────────
 
-def build_tfidf_matrix(product_df: pd.DataFrame):
+def build_tfidf_matrix(product_df):
+    """Vectorizes product titles to enable content-based filtering."""
     logger.info("Building TF-IDF matrix ...")
-
-    df = product_df.copy()
-    df["category_id"] = df["category_id"].fillna("").astype(str)
-    df["title"]       = df["title"].fillna("")
-
-    df["corpus"] = df["title"] + " " + df["category_id"] + " " + df["category_id"]
-
-    vectorizer = TfidfVectorizer(
-        max_features=5000,
-        ngram_range=(1, 2),
-        stop_words="english",
-        min_df=2,
-        sublinear_tf=True
-    )
-
-    tfidf_matrix  = vectorizer.fit_transform(df["corpus"])
-    product_index = pd.Series(range(len(df)), index=df["product_id"])
-
-    logger.info(f" → {tfidf_matrix.shape[0]:,} products × {tfidf_matrix.shape[1]:,} features")
+    
+    # Fill empty titles
+    product_df["title"] = product_df["title"].fillna("")
+    
+    vectorizer = TfidfVectorizer(stop_words="english", max_features=10_000)
+    tfidf_matrix = vectorizer.fit_transform(product_df["title"])
+    
+    # Map ASIN to dataframe index for quick lookups
+    product_index = pd.Series(product_df.index, index=product_df["asin"]).drop_duplicates()
+    
+    logger.info(f" → TF-IDF Matrix shape: {tfidf_matrix.shape}")
     return tfidf_matrix, product_index, vectorizer
 
 
-# ── Step 3: Get Content Recommendations ──────────────────────────────────────
+# ── Step 3: Recommendation Logic ──────────────────────────────────────────────
 
-def get_content_recommendations(
-    user_id: int,
-    user_item_matrix: pd.DataFrame,
-    tfidf_matrix,
-    product_index: pd.Series,
-    top_n: int = 10,
-    top_rated_n: int = 5
-) -> pd.DataFrame:
-    if user_id not in user_item_matrix.index:
-        logger.warning(f"User {user_id} not found in matrix")
+def get_content_recommendations(user_id, matrix, tfidf_matrix, product_index, top_n=10):
+    """Recommends products similar to what the user has rated highly (stars >= 4)."""
+    if user_id not in matrix.index:
+        logger.warning(f"User {user_id} not found in matrix. Cannot provide content recommendations.")
         return pd.DataFrame()
 
-    user_ratings = user_item_matrix.loc[user_id]
-    rated        = user_ratings[user_ratings > 0]
+    # Get positive interactions
+    user_ratings = matrix.loc[user_id]
+    positive_items = user_ratings[user_ratings >= 4].index.tolist()
 
-    if rated.empty:
-        logger.warning(f"User {user_id} has no ratings")
+    if not positive_items:
+        logger.info(f"User {user_id} has no high ratings. Returning empty recommendations.")
         return pd.DataFrame()
 
-    seeds = [p for p in rated.nlargest(top_rated_n).index if p in product_index.index]
-    if not seeds:
+    # Only include items that are in the TF-IDF index
+    valid_items = [item for item in positive_items if item in product_index]
+
+    if not valid_items:
+        logger.info(f"User {user_id}'s rated items not found in catalog. Returning empty.")
         return pd.DataFrame()
 
-    seed_idx     = [product_index[p] for p in seeds]
-    user_profile = np.asarray(tfidf_matrix[seed_idx].mean(axis=0))
-    scores       = cosine_similarity(user_profile, tfidf_matrix).flatten()
-    already_seen = set(rated.index)
+    # Get item vectors for positive items
+    indices = [product_index[item] for item in valid_items]
+    user_profile_vec = tfidf_matrix[indices].mean(axis=0)
 
-    results = [
-        {"product_id": pid, "content_score": round(float(scores[idx]), 4)}
-        for pid, idx in product_index.items()
-        if pid not in already_seen
-    ]
+    # Compute similarity between user profile and all items
+    sim_scores = cosine_similarity(user_profile_vec, tfidf_matrix).flatten()
 
-    rec_df         = (pd.DataFrame(results)
-                        .sort_values("content_score", ascending=False)
-                        .head(top_n)
-                        .reset_index(drop=True))
-    rec_df["rank"] = range(1, len(rec_df) + 1)
+    # Filter out items the user already rated
+    rated_items = user_ratings[user_ratings > 0].index.tolist()
+    rated_indices = [product_index[item] for item in rated_items if item in product_index]
+    sim_scores[rated_indices] = -1
+
+    # Get top N
+    top_indices = sim_scores.argsort()[-top_n:][::-1]
+    
+    rec_df = pd.DataFrame({
+        "product_id"   : product_index.index[top_indices],
+        "content_score": sim_scores[top_indices]
+    })
+    
+    return rec_df
+
+
+def get_item_similarity(asin, tfidf_matrix, product_index, top_n=10):
+    """Recommends products similar to a specific ASIN (Item-Item)."""
+    if asin not in product_index:
+        logger.warning(f"Product {asin} not found in catalog.")
+        return pd.DataFrame()
+    
+    idx = product_index[asin]
+    item_vec = tfidf_matrix[idx]
+    
+    # Compute similarity against all items
+    sim_scores = cosine_similarity(item_vec, tfidf_matrix).flatten()
+    
+    # Exclude the item itself
+    sim_scores[idx] = -1
+    
+    # Get top N
+    top_indices = sim_scores.argsort()[-top_n:][::-1]
+    
+    rec_df = pd.DataFrame({
+        "product_id"   : product_index.index[top_indices],
+        "content_score": sim_scores[top_indices]
+    })
+    
     return rec_df
 
 
 # ── Step 4: Load Content Model ────────────────────────────────────────────────
 
 def load_content_model(engine):
+    """Initializes the content-based engine."""
     product_df                               = load_product_catalog(engine)
     tfidf_matrix, product_index, vectorizer  = build_tfidf_matrix(product_df)
     logger.info("✓ Content model ready")

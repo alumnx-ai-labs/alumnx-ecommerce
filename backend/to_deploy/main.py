@@ -26,6 +26,7 @@ from collaborative import (
 from content_engine import (
     load_content_model,
     get_content_recommendations,
+    get_item_similarity,
 )
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -318,11 +319,12 @@ def search_products(
 
         results = [
             {
-                "product_id"   : row.product_id,
-                "product_name" : row.product_name,
-                "avg_rating"   : row.avg_rating,
-                "total_reviews": row.total_reviews,
+                "asin"         : row.asin if hasattr(row, 'asin') else row.product_id,
+                "title"        : row.title if hasattr(row, 'title') else row.product_name,
+                "stars"        : row.stars if hasattr(row, 'stars') else row.avg_rating,
+                "reviews"      : row.reviews if hasattr(row, 'reviews') else row.total_reviews,
                 "price"        : row.price,
+                "imgUrl"       : row.img_url if hasattr(row, 'img_url') else None,
                 "category_id"  : row.category_id,
             }
             for row in rows
@@ -332,6 +334,7 @@ def search_products(
             "query"  : q,
             "count"  : len(results),
             "results": results,
+            "items"  : results,  # Double-compatibility for search
         }
 
     except Exception as e:
@@ -341,99 +344,121 @@ def search_products(
 
 # ── Endpoint 6: Homepage Paginated Products ───────────────────────────────────
 
-@app.get("/products/homepage", tags=["Homepage"])
-def homepage_products(
-    page     : int = Query(default=1,  ge=1,       description="Page number (starts at 1)"),
-    per_page : int = Query(default=25, ge=1, le=100, description="Products per page (default 25)"),
-    sort_by  : str = Query(default="alphabetical",  description="Sort: 'alphabetical', 'rating', 'price_asc', 'price_desc'"),
+@app.get("/products", tags=["Compatibility"])
+def get_products_compat(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    search: str = Query(None)
 ):
-    """
-    Homepage product listing with pagination.
-    Returns 25 products per page sorted alphabetically by default.
-    Includes next/previous page navigation.
-    """
-    sort_map = {
-        "alphabetical": "title ASC",
-        "rating"      : "stars DESC, reviews DESC",
-        "price_asc"   : "price ASC",
-        "price_desc"  : "price DESC",
-    }
-
-    if sort_by not in sort_map:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid sort_by. Choose from: {list(sort_map.keys())}"
-        )
-
-    order_clause = sort_map[sort_by]
-    offset       = (page - 1) * per_page
-
+    """Adapter for HomePage.jsx: res.data.items and res.data.pages."""
     try:
         from sqlalchemy import text
-
-        with state.engine.connect() as conn:
-            total_products = conn.execute(text(
-                "SELECT COUNT(*) FROM amazon_products WHERE title IS NOT NULL AND price > 0"
-            )).scalar()
-
+        offset = (page - 1) * size
+        
+        # Base query
+        where_clause = "WHERE title IS NOT NULL"
+        params = {"limit": size, "offset": offset}
+        
+        if search:
+            where_clause += " AND title LIKE :search"
+            params["search"] = f"%{search}%"
+            
+        # Get Items
         query = f"""
-            SELECT
-                asin        AS product_id,
-                title       AS product_name,
-                stars       AS avg_rating,
-                reviews     AS total_reviews,
-                price,
-                category_id
-            FROM amazon_products
-            WHERE title IS NOT NULL
-              AND price > 0
-            ORDER BY {order_clause}
-            LIMIT :per_page OFFSET :offset
+            SELECT asin, title, stars, reviews, price, img_url AS imgUrl 
+            FROM amazon_products 
+            {where_clause}
+            LIMIT :limit OFFSET :offset
         """
-
+        
+        # Get count for pages
+        count_query = f"SELECT COUNT(*) FROM amazon_products {where_clause}"
+        
         with state.engine.connect() as conn:
-            rows = conn.execute(text(query), {
-                "per_page": per_page,
-                "offset"  : offset,
-            }).fetchall()
-
-        total_pages  = -(-total_products // per_page)   # ceiling division
-        has_next     = page < total_pages
-        has_previous = page > 1
-
-        products = [
-            {
-                "product_id"   : row.product_id,
-                "product_name" : row.product_name,
-                "avg_rating"   : row.avg_rating,
-                "total_reviews": row.total_reviews,
-                "price"        : row.price,
-                "category_id"  : row.category_id,
-            }
-            for row in rows
-        ]
-
-        return {
-            "products"  : products,
-            "pagination": {
-                "current_page"  : page,
-                "per_page"      : per_page,
-                "total_pages"   : total_pages,
-                "total_products": total_products,
-                "has_next"      : has_next,
-                "has_previous"  : has_previous,
-                "next_page"     : page + 1 if has_next     else None,
-                "previous_page" : page - 1 if has_previous else None,
-            },
-            "links": {
-                "current" : f"/products/homepage?page={page}&per_page={per_page}&sort_by={sort_by}",
-                "next"    : f"/products/homepage?page={page + 1}&per_page={per_page}&sort_by={sort_by}" if has_next     else None,
-                "previous": f"/products/homepage?page={page - 1}&per_page={per_page}&sort_by={sort_by}" if has_previous else None,
-                "first"   : f"/products/homepage?page=1&per_page={per_page}&sort_by={sort_by}",
-                "last"    : f"/products/homepage?page={total_pages}&per_page={per_page}&sort_by={sort_by}",
-            },
-        }
-
+            rows = conn.execute(text(query), params).fetchall()
+            total_count = conn.execute(text(count_query), params).scalar()
+            
+        items = [dict(r._mapping) for r in rows]
+        pages = (total_count + size - 1) // size
+        
+        return {"items": items, "pages": pages}
     except Exception as e:
-        logger.error(f"Homepage error: {e}")
+        logger.error(f"Products compat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/products/{asin}", tags=["Compatibility"])
+def get_product_detail_compat(asin: str):
+    """Adapter for ProductDetailPage.jsx: Direct product object."""
+    try:
+        from sqlalchemy import text
+        query = "SELECT asin, title, stars, reviews, price, img_url AS imgUrl, video_url, category_id, listPrice, boughtInLastMonth, isBestSeller FROM amazon_products WHERE asin = :asin"
+        with state.engine.connect() as conn:
+            row = conn.execute(text(query), {"asin": asin}).fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="Product not found")
+            
+        return dict(row._mapping)
+    except HTTPException: raise
+    except Exception as e:
+        logger.error(f"Product detail error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/products/{asin}/similar", tags=["Compatibility"])
+def get_similar_products_compat(asin: str):
+    """Adapter for ProductDetailPage.jsx: List of {similar_product: {...}}."""
+    try:
+        if state.tfidf_matrix is None:
+            return []
+            
+        rec_df = get_item_similarity(asin, state.tfidf_matrix, state.product_index, top_n=6)
+        if rec_df.empty:
+            return []
+            
+        enriched = enrich_with_product_details(rec_df, state.engine)
+        return [
+            {
+                "similar_product_id": row.product_id,
+                "similar_product": {
+                    "asin":    row.product_id,
+                    "title":   row.product_name,
+                    "stars":   row.avg_rating,
+                    "reviews": row.total_reviews,
+                    "price":   row.price,
+                    "imgUrl":  row.img_url
+                }
+            }
+            for row in enriched.itertuples()
+        ]
+    except Exception as e:
+        logger.error(f"Similar compat error: {e}")
+        return []
+
+
+@app.get("/users/{user_id}/recommendations", tags=["Compatibility"])
+def get_user_recommendations_compat(user_id: int):
+    """Adapter for ProfilePage.jsx: List of {product: {...}}."""
+    try:
+        # Simple combined rec strategy
+        cf_df = get_recommendations(user_id, state.matrix, state.sim_matrix, top_n=5)
+        cb_df = get_content_recommendations(user_id, state.matrix, state.tfidf_matrix, state.product_index, top_n=5)
+        
+        pids = []
+        if not cf_df.empty: pids.extend(cf_df["product_id"].tolist())
+        if not cb_df.empty: pids.extend(cb_df["product_id"].tolist())
+        
+        if not pids: return []
+        
+        # Enrich unique ones
+        unique_pids = list(set(pids))
+        from sqlalchemy import text
+        query = "SELECT asin, title, stars, reviews, price, img_url AS imgUrl FROM amazon_products WHERE asin IN :ids"
+        with state.engine.connect() as conn:
+            rows = conn.execute(text(query), {"ids": tuple(unique_pids)}).fetchall()
+            
+        return [{"product_id": r.asin, "product": dict(r._mapping)} for r in rows]
+    except Exception as e:
+        logger.error(f"Recs compat error: {e}")
+        return []
