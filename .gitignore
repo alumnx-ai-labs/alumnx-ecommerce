@@ -4,3 +4,4 @@ __pycache__/
 *.csv
 amazon_products.csv
 amazon_categories.csv
+node_modules
