@@ -1,171 +1,98 @@
-import React, { useState } from 'react';
-import Layout from './components/Layout';
-import ProductCard from './components/ProductCard';
-import ProductModal from './components/ProductModal';
-import Toast from './components/Toast';
-import { useProducts } from './hooks/useProducts';
-import { Search, Plus, SlidersHorizontal, ChevronLeft, ChevronRight, PackageSearch } from 'lucide-react';
+import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Search, ShoppingCart, Menu, User } from "lucide-react";
+import HomePage from "./pages/HomePage";
+import ProductDetailPage from "./pages/ProductDetailPage";
+import ProfilePage from "./pages/ProfilePage";
+
+function Navbar() {
+    const [searchTerm, setSearchTerm] = useState("");
+    const navigate = useNavigate();
+
+    const handleSearch = (e) => {
+        e.preventDefault();
+        if (searchTerm.trim()) {
+            navigate(`/?search=${encodeURIComponent(searchTerm)}`);
+        } else {
+            navigate("/");
+        }
+    };
+
+    return (
+        <nav style={{ background: "var(--amazon-nav-bg)", color: "white", padding: "10px 20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "20px", maxWidth: "1500px", margin: "0 auto" }}>
+
+                {/* Logo Area */}
+                <Link to="/" style={{ color: "white", display: "flex", alignItems: "center", gap: "5px", textDecoration: "none" }}>
+                    <h1 style={{ fontSize: "24px", margin: 0, fontWeight: "bold" }}>e commerce<span style={{ color: "var(--amazon-orange)" }}> engine</span></h1>
+                </Link>
+
+                {/* Search Bar - Flex Grow */}
+                <form onSubmit={handleSearch} style={{ flex: 1, display: "flex", height: "40px" }}>
+                    <select style={{ background: "#f3f3f3", border: "none", borderRadius: "4px 0 0 4px", padding: "0 10px", outline: "none", cursor: "pointer" }}>
+                        <option>All</option>
+                    </select>
+                    <input
+                        type="text"
+                        placeholder="Search E Commerce Engine"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        style={{ flex: 1, padding: "0 15px", border: "none", outline: "none" }}
+                    />
+                    <button type="submit" style={{ background: "var(--amazon-orange)", border: "none", borderRadius: "0 4px 4px 0", width: "45px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Search size={20} color="#111" />
+                    </button>
+                </form>
+
+                {/* Right Nav Links */}
+                <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+                    <Link to="/profile/1" style={{ color: "white", textDecoration: "none", display: "flex", flexDirection: "column" }}>
+                        <span style={{ fontSize: "12px", color: "#ccc" }}>Hello, User</span>
+                        <span style={{ fontWeight: "bold", display: "flex", alignItems: "center", gap: "2px" }}>Account & Lists <User size={16} /></span>
+                    </Link>
+                    <div style={{ color: "white", textDecoration: "none", display: "flex", flexDirection: "column", cursor: "pointer" }}>
+                        <span style={{ fontSize: "12px", color: "#ccc" }}>Returns</span>
+                        <span style={{ fontWeight: "bold" }}>& Orders</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px", fontWeight: "bold", cursor: "pointer" }}>
+                        <ShoppingCart size={28} />
+                        Cart
+                    </div>
+                </div>
+
+            </div>
+
+            {/* Subnav */}
+            <div style={{ display: "flex", alignItems: "center", gap: "15px", marginTop: "10px", fontSize: "14px", maxWidth: "1500px", margin: "10px auto 0 auto" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", fontWeight: "bold" }}>
+                    <Menu size={18} /> All
+                </div>
+                <div style={{ cursor: "pointer" }}>Today's Deals</div>
+                <div style={{ cursor: "pointer" }}>Customer Service</div>
+                <div style={{ cursor: "pointer" }}>Registry</div>
+                <div style={{ cursor: "pointer" }}>Gift Cards</div>
+                <div style={{ cursor: "pointer" }}>Sell</div>
+            </div>
+        </nav>
+    );
+}
 
 function App() {
-  const {
-    products,
-    categories,
-    loading,
-    error,
-    stats,
-    selectedCategory,
-    setSelectedCategory,
-    page,
-    setPage,
-    notification,
-    clearNotification,
-    removeProduct,
-    saveProduct
-  } = useProducts();
-
-  const [search, setSearch] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null);
-
-  const filteredProducts = products.filter(p =>
-    p.title.toLowerCase().includes(search.toLowerCase()) ||
-    p.asin.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const handleEdit = (product) => {
-    setEditingProduct(product);
-    setModalOpen(true);
-  };
-
-  const handleAdd = () => {
-    setEditingProduct(null);
-    setModalOpen(true);
-  };
-
-  const handleModalSubmit = async (formData) => {
-    const success = await saveProduct(formData, !!editingProduct);
-    if (success) {
-      setModalOpen(false);
-    }
-  };
-
-  return (
-    <Layout stats={stats}>
-      {/* Search & Actions Bar */}
-      <div className="flex flex-col md:flex-row gap-6 mb-12 items-center justify-between">
-        <div className="flex flex-1 flex-col md:flex-row items-center gap-4 w-full">
-          <div className="relative flex-1 w-full lg:max-w-xl">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-            <input
-              type="text"
-              placeholder="Search products by name or code..."
-              className="input-field pl-14 h-16 text-sm font-medium"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <div className="relative w-full md:w-64">
-            <SlidersHorizontal className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-            <select
-              className="input-field pl-14 pr-10 h-16 appearance-none cursor-pointer font-semibold text-slate-300 uppercase tracking-wider text-[11px]"
-              value={selectedCategory || ''}
-              onChange={(e) => setSelectedCategory(e.target.value || null)}
-            >
-              <option value="" className="bg-slate-900">All Categories</option>
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.id} className="bg-slate-900">
-                  {cat.category_name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <button onClick={handleAdd} className="btn-entry group">
-          <Plus size={18} />
-          <span>Add Product</span>
-        </button>
-      </div>
-
-      {/* Grid State Handling */}
-      {loading ? (
-        <div className="flex flex-col items-center justify-center p-40 gap-6">
-          <div className="w-12 h-12 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
-          <p className="stat-label text-slate-500 font-medium tracking-widest">Updating Catalog</p>
-        </div>
-      ) : error ? (
-        <div className="glass-card p-12 text-center" style={{ borderColor: 'rgba(244, 63, 94, 0.2)' }}>
-          <p className="text-white font-bold text-xl mb-2">Service Offline</p>
-          <p className="text-slate-500 font-medium text-sm">{error}</p>
-        </div>
-      ) : filteredProducts.length === 0 ? (
-        <div className="glass-card p-24 text-center flex flex-col items-center gap-6 animate-fade">
-          <PackageSearch size={64} style={{ opacity: 0.2, color: '#60a5fa' }} />
-          <div style={{ maxWidth: '320px' }}>
-            <p className="stat-value text-2xl mb-2">No Results Found</p>
-            <p className="stat-label" style={{ textTransform: 'none' }}>Modify filters or reset search to continue.</p>
-          </div>
-          <button
-            onClick={() => { setSearch(''); setSelectedCategory(null); }}
-            className="btn-entry" style={{ height: '3rem', fontSize: '10px' }}
-          >
-            Clear Filters
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="product-grid">
-            {filteredProducts.map(product => (
-              <ProductCard
-                key={product.asin}
-                product={product}
-                onEdit={handleEdit}
-                onDelete={removeProduct}
-              />
-            ))}
-          </div>
-
-          {/* Pagination */}
-          <div className="flex items-center justify-center gap-10 pt-16 border-t border-white/5">
-            <button
-              disabled={page === 1}
-              onClick={() => setPage(p => p - 1)}
-              className="p-3 rounded-full hover:bg-white/5 disabled:opacity-0 transition-all"
-            >
-              <ChevronLeft size={20} className="text-slate-400" />
-            </button>
-            <div className="flex flex-col items-center">
-              <span className="stat-label text-[10px] text-slate-600">Page</span>
-              <span className="text-2xl font-bold text-white">{page}</span>
+    return (
+        <Router>
+            <div className="app-container">
+                <Navbar />
+                <main className="main-content">
+                    <Routes>
+                        <Route path="/" element={<HomePage />} />
+                        <Route path="/product/:asin" element={<ProductDetailPage />} />
+                        {/* Hardcoded to user 1 for demo based on db struct */}
+                        <Route path="/profile/:userId" element={<ProfilePage />} />
+                    </Routes>
+                </main>
             </div>
-            <button
-              disabled={filteredProducts.length < 20}
-              onClick={() => setPage(p => p + 1)}
-              className="p-3 rounded-full hover:bg-white/5 disabled:opacity-0 transition-all"
-            >
-              <ChevronRight size={20} className="text-slate-400" />
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* Persistence Modal */}
-      <ProductModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        product={editingProduct}
-        onSubmit={handleModalSubmit}
-        categories={categories}
-      />
-      {notification && (
-        <Toast
-          message={notification.message}
-          type={notification.type}
-          onClose={clearNotification}
-        />
-      )}
-    </Layout>
-  );
+        </Router>
+    );
 }
 
 export default App;

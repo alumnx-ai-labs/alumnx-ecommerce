@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+venv/
+.env
+*.pyc
+
+# ML Models (Too large for GitHub)
+backend/models/
+*.pkl
+
+# Node/React
+node_modules/
+dist/
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
