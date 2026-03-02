@@ -64,12 +64,24 @@ jobs:
             )")
 
           INSTRUCTIONS=$(echo "$RESPONSE" | jq -r '.content[0].text')
+          DIVIDER="---"
 
-          printf "## ⚔️ Merge Conflicts Detected — Hey @%s, here's how to fix it!\n\n**Conflicting files:**\n%s\n\n---\n\n%s\n\n---\n*Claude AI · Auto-detected merge conflict on PR #%s*" \
-            "$PR_AUTHOR" "$FILE_LIST" "$INSTRUCTIONS" "$PR_NUMBER" > comment_body.md
+          {
+            echo "## ⚔️ Merge Conflicts Detected — Hey @${PR_AUTHOR}, here's how to fix it!"
+            echo ""
+            echo "**Conflicting files:**"
+            echo "${FILE_LIST}"
+            echo ""
+            echo "${DIVIDER}"
+            echo ""
+            echo "${INSTRUCTIONS}"
+            echo ""
+            echo "${DIVIDER}"
+            echo "*Claude AI · Auto-detected merge conflict on PR #${PR_NUMBER}*"
+          } > comment_body.md
 
-          gh pr comment $PR_NUMBER \
-            --repo $REPO \
+          gh pr comment "$PR_NUMBER" \
+            --repo "$REPO" \
             --body-file comment_body.md
 
   # ─────────────────────────────────────────────
@@ -131,10 +143,17 @@ jobs:
             )")
 
           INSTRUCTIONS=$(echo "$RESPONSE" | jq -r '.content[0].text')
+          DIVIDER="---"
 
-          printf "Hey @%s 👋 Here's how to resolve your merge conflicts:\n\n%s\n\n---\n*Claude AI · Merge Conflict Helper*" \
-            "$COMMENTER" "$INSTRUCTIONS" > comment_body.md
+          {
+            echo "Hey @${COMMENTER} 👋 Here's how to resolve your merge conflicts:"
+            echo ""
+            echo "${INSTRUCTIONS}"
+            echo ""
+            echo "${DIVIDER}"
+            echo "*Claude AI · Merge Conflict Helper*"
+          } > comment_body.md
 
-          gh pr comment $PR_NUMBER \
-            --repo $REPO \
+          gh pr comment "$PR_NUMBER" \
+            --repo "$REPO" \
             --body-file comment_body.md

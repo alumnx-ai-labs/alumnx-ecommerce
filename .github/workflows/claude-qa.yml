@@ -62,9 +62,16 @@ jobs:
 
           ANSWER=$(echo "$RESPONSE" | jq -r '.content[0].text')
 
-          printf "Hey @%s 👋\n\n%s\n\n---\n*Claude AI · Reply to your question*" \
-            "$COMMENTER" "$ANSWER" > comment_body.md
+          DIVIDER="---"
+          {
+            echo "Hey @${COMMENTER} 👋"
+            echo ""
+            echo "${ANSWER}"
+            echo ""
+            echo "${DIVIDER}"
+            echo "*Claude AI · Reply to your question*"
+          } > comment_body.md
 
-          gh pr comment $PR_NUMBER \
-            --repo $REPO \
+          gh pr comment "$PR_NUMBER" \
+            --repo "$REPO" \
             --body-file comment_body.md
