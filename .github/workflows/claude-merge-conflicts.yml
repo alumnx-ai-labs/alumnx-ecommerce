@@ -1,6 +1,6 @@
 name: 3. Claude Merge Conflict Helper
 
-# Test change to verify PR and merge conflict system - 2026-03-02 (pr-test-1)
+# Test change to verify PR and merge conflict system - 2026-03-02 (pr-test-2 - check-system-pr)
 on:
   # Auto-detect when PR becomes conflicted
   pull_request:
