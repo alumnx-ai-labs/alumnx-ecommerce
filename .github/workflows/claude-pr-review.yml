@@ -1,0 +1,59 @@
+name: 1. Claude Auto PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR Diff
+        run: git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
+
+      - name: Claude Review & Auto-Comment
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          REPO: ${{ github.repository }}
+        run: |
+          DIFF=$(cat pr_diff.txt | head -c 9000)
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$(jq -n \
+              --arg diff "$DIFF" \
+              --arg title "$PR_TITLE" \
+              '{
+                model: "claude-sonnet-4-20250514",
+                max_tokens: 1024,
+                messages: [{
+                  role: "user",
+                  content: ("You are an expert code reviewer. Review this PR diff and respond in this exact format:\n\n## 🐛 Bug Risks\n- List potential bugs, null issues, edge cases. If none: say None found.\n\n## 💡 Suggestions\n- List improvements for readability/performance/best practices. If none: say Looks good!\n\n## ✅ Summary\nOne line verdict.\n\n💬 Tip: Comment **hey claude** on this PR to ask me anything about these changes!\n\nPR Title: " + $title + "\n\nDiff:\n" + $diff)
+                }]
+              }'
+            )")
+
+          REVIEW=$(echo "$RESPONSE" | jq -r '.content[0].text')
+
+          gh pr comment $PR_NUMBER \
+            --repo $REPO \
+            --body "## 🤖 Claude AI Code Review
+
+$REVIEW
+
+---
+*Automated review by Claude · PR #$PR_NUMBER*"

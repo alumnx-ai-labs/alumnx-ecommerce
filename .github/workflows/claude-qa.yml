@@ -1,0 +1,72 @@
+name: 2. Claude Q&A (hey claude)
+
+on:
+  issue_comment:
+    types: [created]  # Triggers on every new PR comment
+
+jobs:
+  claude-answer:
+    # Only runs if:
+    # 1. Comment is on a PR (not an issue)
+    # 2. Comment contains "hey claude" (case-insensitive)
+    if: |
+      github.event.issue.pull_request &&
+      contains(toLower(github.event.comment.body), 'hey claude')
+
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR Diff for context
+        run: |
+          PR_NUMBER=${{ github.event.issue.number }}
+          BASE=$(gh pr view $PR_NUMBER --repo ${{ github.repository }} --json baseRefName -q '.baseRefName')
+          git diff origin/$BASE...HEAD > pr_diff.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Answer with Claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          USER_QUESTION: ${{ github.event.comment.body }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          DIFF=$(cat pr_diff.txt | head -c 7000)
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$(jq -n \
+              --arg diff "$DIFF" \
+              --arg question "$USER_QUESTION" \
+              '{
+                model: "claude-sonnet-4-20250514",
+                max_tokens: 1024,
+                messages: [{
+                  role: "user",
+                  content: ("You are a helpful PR assistant. A developer asked a question about this PR. Answer it clearly and concisely based on the diff provided.\n\nQuestion: " + $question + "\n\nPR Diff:\n" + $diff)
+                }]
+              }'
+            )")
+
+          ANSWER=$(echo "$RESPONSE" | jq -r '.content[0].text')
+
+          gh pr comment $PR_NUMBER \
+            --repo $REPO \
+            --body "Hey @$COMMENTER 👋
+
+$ANSWER
+
+---
+*Claude AI · Reply to your question*"
