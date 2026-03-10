@@ -1,0 +1,140 @@
+2026-03-10 18:44:56,134 [INFO] [OK] `description` column already exists.
+2026-03-10 18:44:57,060 [INFO]  Testing connection ...
+2026-03-10 18:44:57,813 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:44:57,818 [INFO] [OK] Model connected.
+2026-03-10 18:44:57,820 [INFO]  Starting | concurrency=30 | ~6 products/sec | ETA ~64.5h
+2026-03-10 18:44:57,823 [INFO] [CONFIG]  Using 3-STAGE FALLBACK: Primary -> Fallback -> Emergency
+2026-03-10 18:45:09,597 [INFO]  Processing chunk 1 (2000 products)...
+2026-03-10 18:45:09,598 [INFO]    Creating 2000 tasks...
+2026-03-10 18:45:09,601 [INFO]    Tasks created, gathering results...
+2026-03-10 18:45:18,869 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:45:26,366 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:45:33,863 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:45:41,350 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:45:48,847 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:45:56,191 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:46:03,658 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:46:11,141 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:46:18,657 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:46:26,140 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:46:33,625 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:46:48,487 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:46:55,939 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:47:03,420 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:47:10,889 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:47:18,373 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:47:26,165 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:47:33,980 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:50:48,901 [INFO] [OK] `description` column already exists.
+2026-03-10 18:50:50,001 [INFO]  Testing connection ...
+2026-03-10 18:50:50,898 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:50:50,900 [INFO] [OK] Model connected.
+2026-03-10 18:50:50,901 [INFO]  Starting | concurrency=30 | ~6 products/sec | ETA ~64.5h
+2026-03-10 18:50:50,901 [INFO] [CONFIG]  Using 3-STAGE FALLBACK: Primary -> Fallback -> Emergency
+2026-03-10 18:51:02,007 [INFO]  Processing chunk 1 (2000 products)...
+2026-03-10 18:51:02,008 [INFO]    Batch 1: processing 30 products...
+2026-03-10 18:51:11,426 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:51:18,882 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:51:26,371 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:51:39,724 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:51:47,527 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:51:54,977 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:53:02,013 [ERROR]    TIMEOUT on batch 1
+2026-03-10 18:53:02,013 [INFO]    Batch 2: processing 30 products...
+2026-03-10 18:53:10,288 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:53:17,608 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:53:25,097 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:53:38,535 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:53:46,036 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:53:53,202 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:53:57,861 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:54:01,599 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:54:06,138 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:54:13,608 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:54:21,093 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:54:42,441 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:54:50,263 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:54:56,777 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:55:01,640 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:55:02,038 [ERROR]    TIMEOUT on batch 2
+2026-03-10 18:55:02,040 [INFO]    Batch 3: processing 30 products...
+2026-03-10 18:55:11,573 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:55:17,399 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:55:24,890 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:55:39,348 [INFO] HTTP Request: POST http://3.109.63.164/gptoss/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-10 18:55:42,403 [ERROR] _GatheringFuture exception was never retrieved
+future: <_GatheringFuture finished exception=CancelledError()>
+Traceback (most recent call last):
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpx\_transports\default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpx\_transports\default.py", line 394, in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpcore\_async\connection_pool.py", line 256, in handle_async_request
+    raise exc from None
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpcore\_async\connection_pool.py", line 236, in handle_async_request
+    response = await connection.handle_async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpcore\_async\connection.py", line 103, in handle_async_request
+    return await self._connection.handle_async_request(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpcore\_async\http11.py", line 136, in handle_async_request
+    raise exc
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpcore\_async\http11.py", line 106, in handle_async_request
+    ) = await self._receive_response_headers(**kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpcore\_async\http11.py", line 177, in _receive_response_headers
+    event = await self._receive_event(timeout=timeout)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpcore\_async\http11.py", line 217, in _receive_event
+    data = await self._network_stream.read(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpcore\_backends\anyio.py", line 32, in read
+    with map_exceptions(exc_map):
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 155, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpcore\_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ReadTimeout
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "F:\HP\Alumnx\E-Commerce_Deploy\alumnx-ecommerce\backend\generate_descriptions.py", line 176, in generate_one
+    resp = await client.post(
+           ^^^^^^^^^^^^^^^^^^
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpx\_client.py", line 1859, in post
+    return await self.request(
+           ^^^^^^^^^^^^^^^^^^^
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpx\_client.py", line 1540, in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpx\_client.py", line 1629, in send
+    response = await self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpx\_client.py", line 1657, in _send_handling_auth
+    response = await self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpx\_client.py", line 1694, in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpx\_client.py", line 1730, in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpx\_transports\default.py", line 393, in handle_async_request
+    with map_httpcore_exceptions():
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 155, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "F:\HP\Alumnx\E-Commerce_Deploy\venv\Lib\site-packages\httpx\_transports\default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ReadTimeout
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "F:\HP\Alumnx\E-Commerce_Deploy\alumnx-ecommerce\backend\generate_descriptions.py", line 243, in generate_one
+    return await generate_one(client, semaphore, row, attempt + 1)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python311\Lib\asyncio\locks.py", line 387, in acquire
+    await fut
+asyncio.exceptions.CancelledError

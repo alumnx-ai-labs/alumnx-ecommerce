@@ -1,12 +1,8 @@
 """
 main.py
-FastAPI server to test Collaborative and Content-Based Filtering engines.
+FastAPI server — Collaborative Filtering, Content-Based Filtering,
+Semantic Search (OpenAI + Pinecone), and Elasticsearch keyword search.
 
-Run with:
-    uvicorn main:app --reload
-
-First time setup:
-    python save_models.py  ← run this once before starting the server
 """
 
 from fastapi import FastAPI, HTTPException, Query
@@ -16,6 +12,7 @@ import logging
 import pickle
 import os
 import time
+from typing import Optional
 
 from collaborative import (
     build_engine,
@@ -27,6 +24,11 @@ from content_engine import (
     load_content_model,
     get_content_recommendations,
 )
+from semantic_search import (
+    query_semantic_search,
+    get_index_stats,
+)
+from elastic_search import get_es_client, keyword_search   
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,7 @@ class AppState:
     product_df    = None
     tfidf_matrix  = None
     product_index = None
+    es            = None   
 
 state = AppState()
 
@@ -88,10 +91,18 @@ async def lifespan(app: FastAPI):
         logger.warning("⚠️  No saved models found — building from DB (this will take a few minutes) ...")
         logger.warning("    Run 'python save_models.py' next time to avoid this.")
 
-        state.matrix, state.sim_matrix                              = load_model(state.engine)
+        state.matrix, state.sim_matrix                               = load_model(state.engine)
         state.product_df, state.tfidf_matrix, state.product_index, _ = load_content_model(state.engine)
 
         logger.info("✓ Models built and ready")
+
+    # ── Elasticsearch client ──────────────────────────────────────────────────
+    try:
+        state.es = get_es_client()
+        logger.info("✓ Elasticsearch client ready")
+    except ConnectionError as e:
+        logger.warning(f"⚠️  Elasticsearch unavailable: {e}  — /search/elastic will be disabled")
+        state.es = None
 
     yield
 
@@ -104,13 +115,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Recommendation Engine API",
-    description="Collaborative Filtering and Content-Based Filtering endpoints",
-    version="1.0.0",
+    description=(
+        "Collaborative Filtering, Content-Based Filtering, "
+        "Semantic Search (OpenAI + Pinecone), "
+        "and Elasticsearch keyword search endpoints."
+    ),
+    version="3.0.0",
     lifespan=lifespan,
 )
 
 
-# ── Helper ────────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def validate_user(user_id: int):
     """Raise 404 if user doesn't exist in the rating matrix."""
@@ -120,19 +135,38 @@ def validate_user(user_id: int):
             detail=f"User {user_id} not found in the rating matrix."
         )
 
+def require_es():
+    """Raise 503 if Elasticsearch is not available."""
+    if state.es is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Elasticsearch is not available. "
+                "Start ES and run 'python build_search_index.py', then restart the server."
+            ),
+        )
+
 
 # ── Health Check ──────────────────────────────────────────────────────────────
 
 @app.get("/health", tags=["Status"])
 def health_check():
-    """Check if the API and both models are live."""
+    """Check if the API, both recommendation models, and search backends are live."""
+    es_ok = False
+    if state.es is not None:
+        try:
+            es_ok = state.es.ping()
+        except Exception:
+            pass
+
     return {
         "status"          : "ok",
         "models_from_disk": models_exist(),
-        "users_loaded"    : int(state.matrix.shape[0])    if state.matrix       is not None else 0,
-        "products_loaded" : int(state.matrix.shape[1])    if state.matrix       is not None else 0,
-        "cf_model"        : state.sim_matrix              is not None,
-        "content_model"   : state.tfidf_matrix            is not None,
+        "users_loaded"    : int(state.matrix.shape[0]) if state.matrix      is not None else 0,
+        "products_loaded" : int(state.matrix.shape[1]) if state.matrix      is not None else 0,
+        "cf_model"        : state.sim_matrix           is not None,
+        "content_model"   : state.tfidf_matrix         is not None,
+        "elasticsearch"   : es_ok,
     }
 
 
@@ -271,7 +305,7 @@ def compare_recommendations(
     }
 
 
-# ── Endpoint 5: Search ────────────────────────────────────────────────────────
+# ── Endpoint 5: Keyword Search (SQL LIKE) ────────────────────────────────────
 
 @app.get("/search", tags=["Search"])
 def search_products(
@@ -280,7 +314,7 @@ def search_products(
     min_rating : float = Query(default=0.0, ge=0.0,  le=5.0,    description="Minimum average rating filter"),
 ):
     """
-    Search products by title from the database.
+    Search products by title from the database (keyword / LIKE match).
     Results sorted by highest rating first, then by review count.
     """
     try:
@@ -339,13 +373,157 @@ def search_products(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── Endpoint 6: Homepage Paginated Products ───────────────────────────────────
+# ── Endpoint 6: Elasticsearch Keyword Search ─────────────────────────────────
+
+@app.get("/search/elastic", tags=["Search"])
+def elastic_search(
+    q           : str            = Query(..., min_length=1,             description="Search query e.g. 'wireless headphones'"),
+    top_n       : int            = Query(default=10, ge=1,    le=50,    description="Number of results"),
+    min_rating  : float          = Query(default=0.0, ge=0.0,  le=5.0, description="Minimum avg star rating"),
+    min_price   : Optional[float]= Query(default=None, ge=0,            description="Minimum price filter"),
+    max_price   : Optional[float]= Query(default=None, ge=0,            description="Maximum price filter"),
+    category_id : Optional[str]  = Query(default=None,                  description="Filter to a specific category ID"),
+    fuzziness   : str            = Query(default="AUTO",                description="Typo tolerance: AUTO, 0, 1, 2"),
+):
+    """
+    **Elasticsearch-powered keyword search** — smarter than SQL LIKE.
+
+    Features:
+    - **Fuzzy matching** — tolerates typos (`wireles headphon` → wireless headphones)
+    - **Relevance scoring** — title matches rank higher than category matches
+    - **Phrase boost** — exact phrase matches float to the top
+    - **Filters** — price range, min rating, category
+    - Returns a `score` field per result showing match strength
+
+    **Setup required (once):**
+    ```
+    python build_search_index.py
+    ```
+    """
+    require_es()
+
+    start = time.time()
+
+    try:
+        results = keyword_search(
+            es          = state.es,
+            query       = q,
+            top_n       = top_n,
+            min_rating  = min_rating,
+            min_price   = min_price,
+            max_price   = max_price,
+            category_id = category_id,
+            fuzziness   = fuzziness,
+        )
+    except Exception as e:
+        logger.error(f"Elasticsearch search error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not results:
+        return {
+            "query"          : q,
+            "method"         : "elasticsearch",
+            "count"          : 0,
+            "results"        : [],
+            "response_time_s": round(time.time() - start, 3),
+            "message"        : f"No products found for '{q}'",
+        }
+
+    return {
+        "query"          : q,
+        "method"         : "elasticsearch",
+        "count"          : len(results),
+        "response_time_s": round(time.time() - start, 3),
+        "results"        : results,
+    }
+
+
+# ── Endpoint 7: Semantic Search (OpenAI + Pinecone) ───────────────────────────
+
+@app.get("/search/semantic", tags=["Search"])
+def semantic_search(
+    q           : str            = Query(..., min_length=1,            description="Natural language query e.g. 'comfortable running shoes for wide feet'"),
+    top_n       : int            = Query(default=10, ge=1,   le=50,    description="Number of results to return"),
+    min_rating  : float          = Query(default=0.0, ge=0.0, le=5.0,  description="Minimum average rating filter"),
+    max_price   : Optional[float]= Query(default=None, ge=0.0,         description="Maximum price filter"),
+    category_id : Optional[str]  = Query(default=None,                 description="Filter by category ID"),
+):
+    """
+    **Semantic Search** powered by OpenAI Embeddings + Pinecone.
+
+    Unlike keyword search, this understands *meaning* — so:
+    - "noise cancelling headphones" matches "headphones with active noise reduction"
+    - "gift for a 5 year old" matches children's toys and games
+    - "budget laptop for students" matches affordable student-friendly laptops
+
+    Each result includes a `similarity_score` (0–1, higher = more relevant).
+
+    **Setup required (once):**
+    ```
+    python semantic_search.py --index
+    ```
+    """
+    start = time.time()
+
+    try:
+        results = query_semantic_search(
+            query       = q,
+            top_n       = top_n,
+            min_rating  = min_rating,
+            max_price   = max_price,
+            category_id = category_id,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        logger.error(f"Semantic search error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    elapsed = round(time.time() - start, 3)
+
+    if not results:
+        return {
+            "query"          : q,
+            "method"         : "semantic_search",
+            "count"          : 0,
+            "results"        : [],
+            "response_time_s": elapsed,
+            "message"        : f"No products found for '{q}' — ensure the index has been built.",
+        }
+
+    return {
+        "query"          : q,
+        "method"         : "semantic_search",
+        "count"          : len(results),
+        "response_time_s": elapsed,
+        "results"        : results,
+    }
+
+
+# ── Endpoint 8: Semantic Index Stats ─────────────────────────────────────────
+
+@app.get("/search/semantic/stats", tags=["Search"])
+def semantic_index_stats():
+    """
+    Returns stats about the Pinecone semantic index
+    (total vectors indexed, model used, dimensions).
+    """
+    try:
+        return get_index_stats()
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        logger.error(f"Pinecone stats error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Endpoint 9: Homepage Paginated Products ───────────────────────────────────
 
 @app.get("/products/homepage", tags=["Homepage"])
 def homepage_products(
-    page     : int = Query(default=1,  ge=1,       description="Page number (starts at 1)"),
+    page     : int = Query(default=1,  ge=1,         description="Page number (starts at 1)"),
     per_page : int = Query(default=25, ge=1, le=100, description="Products per page (default 25)"),
-    sort_by  : str = Query(default="alphabetical",  description="Sort: 'alphabetical', 'rating', 'price_asc', 'price_desc'"),
+    sort_by  : str = Query(default="alphabetical",   description="Sort: 'alphabetical', 'rating', 'price_asc', 'price_desc'"),
 ):
     """
     Homepage product listing with pagination.
