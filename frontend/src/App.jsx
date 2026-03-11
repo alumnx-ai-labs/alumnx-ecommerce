@@ -24,7 +24,7 @@ function Navbar() {
 
                 {/* Logo Area */}
                 <Link to="/" style={{ color: "white", display: "flex", alignItems: "center", gap: "5px", textDecoration: "none" }}>
-                    <h1 style={{ fontSize: "24px", margin: 0, fontWeight: "bold" }}>e commerce<span style={{ color: "var(--amazon-orange)" }}> engine</span></h1>
+                    <h1 style={{ fontSize: "24px", margin: 0, fontWeight: "bold" }}>e commerce<span style={{ color: "var(--amazon-yellow)" }}> engine</span></h1>
                 </Link>
 
                 {/* Search Bar - Flex Grow */}
@@ -34,10 +34,10 @@ function Navbar() {
                     </select>
                     <input
                         type="text"
-                        placeholder="Search E Commerce Engine"
+                        placeholder="Ask AI: Try 'ergonomic gadgets' or 'blue evening dress'..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        style={{ flex: 1, padding: "0 15px", border: "none", outline: "none" }}
+                        style={{ flex: 1, padding: "0 15px", border: "none", outline: "none", color: "#111" }}
                     />
                     <button type="submit" style={{ background: "var(--amazon-orange)", border: "none", borderRadius: "0 4px 4px 0", width: "45px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <Search size={20} color="#111" />

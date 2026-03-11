@@ -17,6 +17,7 @@ import pandas as pd
 import logging
 from datetime import datetime
 import os
+import httpx
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -53,6 +54,7 @@ DB_PORT     = int(os.getenv("DB_PORT", 3306))
 DB_NAME     = os.getenv("DB_NAME")
 DB_USER     = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
+AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://0.0.0.0:8006")
 
 # ── Helper: Run SQL and return DataFrame ───────────────────────────────────────
 
@@ -118,29 +120,84 @@ def get_products(
         where_clause = "WHERE category_id = :cat_id"
         params["cat_id"] = category_id
 
-    # img_url is now the primary column name in DB
+    # DB columns are camelCase: imgUrl, productURL
     sql = f"""
         SELECT 
             asin, title, stars, reviews, price, category_id,
-            img_url, video_url
+            imgUrl, productURL
         FROM amazon_products 
         {where_clause} 
         LIMIT :limit OFFSET :offset
     """
     try:
         with state["engine"].connect() as conn:
+            # 1. Get total count for pagination
+            count_sql = f"SELECT COUNT(*) FROM amazon_products {where_clause}"
+            total_total = conn.execute(text(count_sql), params).scalar()
+            
+            # 2. Get the products for the current page
             logger.info(f"Querying products: {sql} with params {params}")
             df = pd.read_sql(text(sql), conn, params=params)
             logger.info(f"Query returned {len(df)} rows")
+            
         return {
             "page": page,
             "limit": limit,
-            "total_results": len(df),
+            "total_count": total_total,
+            "total_pages": (total_total + limit - 1) // limit,
             "products": df.fillna("N/A").to_dict(orient="records")
         }
     except Exception as e:
         logger.error(f"Products query failed: {e}")
         return {"page": page, "limit": limit, "total_results": 0, "products": []}
+
+@app.get("/products/search", tags=["Products"])
+def search_products(query: str = Query(...), limit: int = Query(default=15, le=50)):
+    """
+    Semantic Search:
+    1. Send query to AI Service.
+    2. Get ASINs from Pinecone results.
+    3. Fetch full product details from DB.
+    """
+    try:
+        # A. Get IDs from AI Service
+        res = httpx.get(f"{AI_SERVICE_URL}/search", params={"query": query, "top_k": limit}, timeout=10.0)
+        res.raise_for_status()
+        search_data = res.json()
+        matches = search_data.get("matches", [])
+        
+        # 0.4 Cutoff: Only keep results that are truly semantically relevant
+        RELEVANCE_THRESHOLD = 0.5
+        filtered_matches = [m for m in matches if m.get("score", 0) >= RELEVANCE_THRESHOLD]
+        asins = [m["product_id"] for m in filtered_matches]
+        
+        if not asins:
+            logger.info(f"No results passed the relevance threshold (0.4) for query: {query}")
+            return {"query": query, "total_results": 0, "products": [], "message": "No highly relevant matches found"}
+
+        # B. Fetch details from DB (preserve order)
+        placeholders = ", ".join([f":asin_{i}" for i in range(len(asins))])
+        params = {f"asin_{i}": asin for i, asin in enumerate(asins)}
+        
+        sql = f"""
+            SELECT * FROM amazon_products 
+            WHERE asin IN ({placeholders})
+            ORDER BY FIELD(asin, {placeholders})
+        """
+        sql_final = text(sql)
+        
+        with state["engine"].connect() as conn:
+            df = pd.read_sql(sql_final, conn, params=params)
+            
+        return {
+            "query": query,
+            "total_results": len(df),
+            "products": df.fillna("N/A").to_dict(orient="records")
+        }
+        
+    except Exception as e:
+        logger.error(f"Semantic search failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/products/{asin}", tags=["Products"])
 def get_product(asin: str):
@@ -166,6 +223,19 @@ def create_product(product: dict):
             placeholders = ", ".join([f":{k}" for k in product.keys()])
             sql = text(f"INSERT INTO amazon_products ({cols}) VALUES ({placeholders})")
             conn.execute(sql, product)
+        
+        # Trigger sync to AI Service
+        try:
+            # We use 'title' as the description if no specific description field exists
+            sync_payload = {
+                "product_id": product["asin"],
+                "description": product.get("title", "")
+            }
+            httpx.post(f"{AI_SERVICE_URL}/embed-description", json=sync_payload, timeout=10.0)
+            logger.info(f"Triggered Pinecone embedding sync for {product['asin']}")
+        except Exception as e:
+            logger.warning(f"Failed to trigger AI Service sync: {e}")
+
         return {"message": "Product created successfully", "asin": product["asin"]}
     except Exception as e:
         logger.error(f"Create product failed: {e}")
@@ -183,6 +253,19 @@ def update_product(asin: str, product: dict):
             updates = ", ".join([f"{k} = :{k}" for k in params.keys()])
             sql = text(f"UPDATE amazon_products SET {updates} WHERE asin = :target_asin")
             conn.execute(sql, {**params, "target_asin": asin})
+        
+        # Sync updated product
+        try:
+            sync_payload = {
+                "product_id": asin,
+                "description": params.get("title", "")
+            }
+            if sync_payload["description"]: # only sync if we have a title to embed
+                httpx.post(f"{AI_SERVICE_URL}/embed-description", json=sync_payload, timeout=10.0)
+                logger.info(f"Triggered Pinecone embedding sync for {asin}")
+        except Exception as e:
+            logger.warning(f"Failed to trigger AI Service sync: {e}")
+
         return {"message": "Product updated successfully"}
     except Exception as e:
         logger.error(f"Update product failed: {e}")
