@@ -10,7 +10,9 @@ export const ProductService = {
   },
 
   searchProducts: async (query, limit = 10) => {
-    const res = await fetch(`${API_BASE}/products/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+    const res = await fetch(
+      `${API_BASE}/products/search?query=${encodeURIComponent(query)}&limit=${limit}`,
+    );
     if (!res.ok) throw new Error("Semantic search failed");
     return res.json();
   },
@@ -86,5 +88,46 @@ export const AIService = {
     });
     if (!res.ok) throw new Error("Failed to embed product description");
     return res.json();
-  }
+  },
+};
+
+export const UserService = {
+  getProfile: async (userId) => {
+    const res = await fetch(`${API_BASE}/users/${userId}/profile`);
+    if (!res.ok) throw new Error("Failed to fetch user profile");
+    return res.json();
+  },
+
+  getHybridRecommendations: async (userId, topK = 10, timeoutMs = 20000) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(
+        `${API_BASE}/users/${userId}/recommendations/hybrid?top_k=${topK}`,
+        { signal: controller.signal },
+      );
+      if (!res.ok) throw new Error("Failed to fetch hybrid recommendations");
+      return res.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+
+  getCollaborativeRecommendations: async (userId, topK = 10) => {
+    const res = await fetch(
+      `${API_BASE}/users/${userId}/recommendations/collaborative?top_k=${topK}`,
+    );
+    if (!res.ok)
+      throw new Error("Failed to fetch collaborative recommendations");
+    return res.json();
+  },
+
+  getContentBasedRecommendations: async (userId, topK = 10) => {
+    const res = await fetch(
+      `${API_BASE}/users/${userId}/recommendations/content-based?top_k=${topK}`,
+    );
+    if (!res.ok)
+      throw new Error("Failed to fetch content-based recommendations");
+    return res.json();
+  },
 };
