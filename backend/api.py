@@ -53,7 +53,9 @@ AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://0.0.0.0:8006")
 
 # ── Helper: Run SQL and return DataFrame ───────────────────────────────────────
 
-def query_db(sql: str, params: dict = {}) -> pd.DataFrame:
+def query_db(sql: str, params: dict = None) -> pd.DataFrame:
+    if params is None:
+        params = {}
     with state["engine"].connect() as conn:
         return pd.read_sql(text(sql), conn, params=params)
 
@@ -226,11 +228,9 @@ def get_products(
     """
     try:
         with state["engine"].connect() as conn:
-            # 1. Get total count for pagination
+            # Get true total count for proper pagination
             count_sql = f"SELECT COUNT(*) FROM amazon_products {where_clause}"
-            total_total = conn.execute(text(count_sql), params).scalar()
-            
-            # 2. Get the products for the current page
+            total_count = conn.execute(text(count_sql), params).scalar()
             logger.info(f"Querying products: {sql} with params {params}")
             df = pd.read_sql(text(sql), conn, params=params)
             logger.info(f"Query returned {len(df)} rows")
@@ -238,13 +238,13 @@ def get_products(
         return {
             "page": page,
             "limit": limit,
-            "total_count": total_total,
-            "total_pages": (total_total + limit - 1) // limit,
+            "total_count": int(total_count),
+            "total_pages": (int(total_count) + limit - 1) // limit,
             "products": df.fillna("N/A").to_dict(orient="records")
         }
     except Exception as e:
         logger.error(f"Products query failed: {e}")
-        return {"page": page, "limit": limit, "total_results": 0, "products": []}
+        return {"page": page, "limit": limit, "total_count": 0, "total_pages": 0, "products": []}
 
 @app.get("/products/search", tags=["Products"])
 def search_products(query: str = Query(...), limit: int = Query(default=15, le=50)):
