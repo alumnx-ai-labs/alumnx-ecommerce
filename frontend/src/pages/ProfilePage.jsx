@@ -8,7 +8,7 @@ export default function ProfilePage() {
   const { userId } = useParams();
   const [profile, setProfile] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
-  const [activeTab, setActiveTab] = useState("hybrid");
+  const [activeTab, setActiveTab] = useState("collaborative");
   const [loading, setLoading] = useState(true);
   const [recsLoading, setRecsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -36,9 +36,7 @@ export default function ProfilePage() {
       setRecommendations([]);
       try {
         let data;
-        if (activeTab === "hybrid") {
-          data = await UserService.getHybridRecommendations(userId, 10);
-        } else if (activeTab === "collaborative") {
+        if (activeTab === "collaborative") {
           data = await UserService.getCollaborativeRecommendations(userId, 10);
         } else {
           data = await UserService.getContentBasedRecommendations(userId, 10);
@@ -130,7 +128,6 @@ export default function ProfilePage() {
         {/* Tab selector */}
         <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
           {[
-            { key: "hybrid", label: "Hybrid (Best)" },
             { key: "collaborative", label: "Collaborative" },
             { key: "content", label: "Content-Based" },
           ].map((tab) => (

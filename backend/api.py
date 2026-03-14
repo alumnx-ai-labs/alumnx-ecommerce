@@ -14,7 +14,6 @@ Endpoints:
   GET  /stats                                            → Overall system stats
   GET  /users/{user_id}/recommendations/collaborative    → Collaborative filtering
   GET  /users/{user_id}/recommendations/content-based   → TF-IDF content filtering
-  GET  /users/{user_id}/recommendations/hybrid          → Hybrid (CF + TF-IDF)
 """
 
 import os
@@ -93,6 +92,16 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(_warm_background())
     logger.info("✓ API ready — cache warming in background")
+    
+    # Warm up AI service connection
+    try:
+        import httpx
+        logger.info("Pinging AI search service for warm-up...")
+        async with httpx.AsyncClient() as client:
+            await client.get(f"{os.getenv('AI_SERVICE_URL', 'http://127.0.0.1:8006')}/search", params={"query": "warmup", "top_k": 1}, timeout=2.0)
+    except Exception as e:
+        logger.warning(f"AI service warmup failed (it might be starting up): {e}")
+
     yield
     if state["engine"]:
         state["engine"].dispose()
@@ -117,10 +126,10 @@ app.add_middleware(
 # ── In-memory TTL cache ────────────────────────────────────────────────────────
 # Avoids rebuilding heavy matrices (TF-IDF, interaction matrix, cosine similarity)
 # on every request. Each cache entry is invalidated after CACHE_TTL seconds.
-_CACHE_TTL = 600  # 10 minutes
+_CACHE_TTL = 3600  # 1 hour (Increased from 10 mins to reduce latency)
 
-_tfidf_cache: dict = {"ts": 0, "tfidf_matrix": None, "asin_to_idx": None, "all_products_df": None}
-_cf_cache:    dict = {"ts": 0, "pivot": None, "ratings_matrix": None, "user_similarity": None}
+_tfidf_cache: dict = {"ts": 0, "tfidf_matrix": None, "asin_to_idx": None, "all_products_df": None, "building": False}
+_cf_cache:    dict = {"ts": 0, "pivot": None, "ratings_matrix": None, "user_similarity": None, "building": False}
 
 
 def _tfidf_cache_valid() -> bool:
@@ -132,49 +141,61 @@ def _cf_cache_valid() -> bool:
 
 def _warm_tfidf_cache():
     """Build and store the TF-IDF matrix. Called once at startup."""
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    logger.info("Pre-warming TF-IDF cache...")
-    df = query_db(
-        "SELECT asin, title FROM amazon_products "
-        "WHERE title IS NOT NULL AND title != '' "
-        "ORDER BY stars DESC, reviews DESC "
-        "LIMIT 15000"
-    )
-    if df.empty:
-        logger.warning("TF-IDF pre-warm skipped — no products in DB")
+    if _tfidf_cache["building"]:
         return
-    vectorizer   = TfidfVectorizer(stop_words="english", max_features=5000, ngram_range=(1, 2))
-    tfidf_matrix = vectorizer.fit_transform(df["title"].fillna(""))
-    asin_to_idx  = {asin: i for i, asin in enumerate(df["asin"])}
-    _tfidf_cache["all_products_df"] = df
-    _tfidf_cache["tfidf_matrix"]    = tfidf_matrix
-    _tfidf_cache["asin_to_idx"]     = asin_to_idx
-    _tfidf_cache["ts"]              = time.time()
-    logger.info(f"✓ TF-IDF cache ready ({len(df):,} products)")
+    _tfidf_cache["building"] = True
+    try:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        logger.info("Pre-warming TF-IDF cache...")
+        df = query_db(
+            "SELECT asin, title FROM amazon_products "
+            "WHERE title IS NOT NULL AND title != '' "
+            "ORDER BY stars DESC, reviews DESC "
+            "LIMIT 15000"
+        )
+        if df.empty:
+            logger.warning("TF-IDF pre-warm skipped — no products in DB")
+            return
+        vectorizer   = TfidfVectorizer(stop_words="english", max_features=5000, ngram_range=(1, 2))
+        tfidf_matrix = vectorizer.fit_transform(df["title"].fillna(""))
+        asin_to_idx  = {asin: i for i, asin in enumerate(df["asin"])}
+        _tfidf_cache["all_products_df"] = df
+        _tfidf_cache["tfidf_matrix"]    = tfidf_matrix
+        _tfidf_cache["asin_to_idx"]     = asin_to_idx
+        _tfidf_cache["ts"]              = time.time()
+        logger.info(f"✓ TF-IDF cache ready ({len(df):,} products)")
+    finally:
+        _tfidf_cache["building"] = False
 
 
 def _warm_cf_cache():
     """Build and store the interaction matrix + cosine similarity. Called once at startup."""
-    import numpy as np
-    logger.info("Pre-warming CF cache...")
-    ratings_df = query_db(
-        "SELECT user_id, product_id, rating FROM product_ratings "
-        "ORDER BY rating DESC LIMIT 20000"
-    )
-    if ratings_df.empty:
-        logger.warning("CF pre-warm skipped — no ratings in DB")
+    if _cf_cache["building"]:
         return
-    pivot          = ratings_df.pivot_table(index="user_id", columns="product_id", values="rating", fill_value=0)
-    ratings_matrix = pivot.to_numpy()
-    norms          = np.linalg.norm(ratings_matrix, axis=1, keepdims=True)
-    norms[norms == 0] = 1e-9
-    normalised     = ratings_matrix / norms
-    user_similarity = np.dot(normalised, normalised.T)
-    _cf_cache["pivot"]           = pivot
-    _cf_cache["ratings_matrix"]  = ratings_matrix
-    _cf_cache["user_similarity"] = user_similarity
-    _cf_cache["ts"]              = time.time()
-    logger.info(f"✓ CF cache ready ({pivot.shape[0]} users × {pivot.shape[1]} products)")
+    _cf_cache["building"] = True
+    try:
+        import numpy as np
+        logger.info("Pre-warming CF cache...")
+        ratings_df = query_db(
+            "SELECT user_id, product_id, rating FROM product_ratings "
+            "ORDER BY rating DESC LIMIT 20000"
+        )
+        if ratings_df.empty:
+            logger.warning("CF pre-warm skipped — no ratings in DB")
+            return
+        pivot          = ratings_df.pivot_table(index="user_id", columns="product_id", values="rating", fill_value=0)
+        ratings_matrix = pivot.to_numpy()
+        norms          = np.linalg.norm(ratings_matrix, axis=1, keepdims=True)
+        norms[norms == 0] = 1e-9
+        normalised     = ratings_matrix / norms
+        user_similarity = np.dot(normalised, normalised.T)
+        _cf_cache["pivot"]           = pivot
+        _cf_cache["ratings_matrix"]  = ratings_matrix
+        _cf_cache["user_similarity"] = user_similarity
+        _cf_cache["ts"]              = time.time()
+        logger.info(f"✓ CF cache ready ({pivot.shape[0]} users × {pivot.shape[1]} products)")
+    finally:
+        _cf_cache["building"] = False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -261,8 +282,8 @@ def search_products(query: str = Query(...), limit: int = Query(default=15, le=5
         search_data = res.json()
         matches = search_data.get("matches", [])
         
-        # 0.5 Cutoff: Only keep results that are truly semantically relevant
-        RELEVANCE_THRESHOLD = 0.5
+        # 0.6 Cutoff: Higher threshold ensures more precise semantic matches
+        RELEVANCE_THRESHOLD = 0.6
         filtered_matches = [m for m in matches if m.get("score", 0) >= RELEVANCE_THRESHOLD]
         asins = [m["product_id"] for m in filtered_matches]
         
@@ -460,9 +481,6 @@ def _run_collaborative_filtering(user_id: int, top_k: int, k_similar_users: int 
 
     "Find users who rated products the same way as you, then recommend
      what THEY liked but YOU haven't seen yet."
-
-    This directly mirrors the notebook approach:
-        CollaborativeFiltering.ipynb  →  Tasks 4 – 7
 
     Step-by-step:
     ┌─────────────────────────────────────────────────────────────────┐
@@ -833,138 +851,6 @@ def content_based_recommendations(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 8. HYBRID RECOMMENDATIONS
-# ══════════════════════════════════════════════════════════════════════════════
-
-@app.get("/users/{user_id}/recommendations/hybrid", tags=["Recommendations"])
-def hybrid_recommendations(
-    user_id: int,
-    top_k: int = Query(default=10, ge=1, le=50),
-    cf_weight: float = Query(default=0.5, ge=0.0, le=1.0,
-                             description="Weight for CF score (0=pure CB, 1=pure CF)"),
-):
-    """
-    Hybrid Recommendations = Collaborative Filtering + Content-Based Filtering (TF-IDF).
-
-    Combines both signals:
-      hybrid_score = cf_weight * CF_score + (1 - cf_weight) * CB_score
-
-    Both scores are normalised to [0, 1] before combining so they are
-    comparable regardless of their original scales.
-
-    Products that appear in BOTH lists get a strong boost; products that
-    only appear in one list are also considered.
-    """
-    # 1. Quick check: does user have any ratings?
-    ratings_df = query_db(
-        "SELECT COUNT(*) AS cnt FROM product_ratings WHERE user_id = :uid",
-        {"uid": user_id},
-    )
-    if ratings_df.empty or ratings_df.iloc[0]["cnt"] == 0:
-        # No ratings yet — return top-rated popular products as a cold-start fallback
-        popular_df = query_db(
-            "SELECT * FROM amazon_products "
-            "WHERE stars IS NOT NULL AND reviews IS NOT NULL "
-            "ORDER BY stars DESC, reviews DESC "
-            "LIMIT :lim",
-            {"lim": top_k},
-        )
-        products = popular_df.fillna("N/A").to_dict(orient="records")
-        return {
-            "user_id":  user_id,
-            "method":   "popular",
-            "total":    len(products),
-            "products": products,
-        }
-
-    # 2. Run CF (user-based cosine similarity, in-process)
-    cf_results = _run_collaborative_filtering(user_id, top_k * 2)
-
-    # 3. Run CB (TF-IDF cosine similarity, in-process — no external service needed)
-    cb_recommendations = []
-    try:
-        cb_recommendations = _run_content_based_tfidf(user_id, top_k * 2)
-    except Exception as exc:
-        logger.warning(f"Hybrid: TF-IDF CB failed, using CF only. Error: {exc}")
-
-    # 4. Normalise CF scores to [0, 1]
-    # CF predicted_rating is typically in [1, 5].  Clamp then scale.
-    cf_score_map: Dict[str, float] = {}
-    if cf_results:
-        raw_scores = [r["predicted_rating"] for r in cf_results]
-        min_s, max_s = min(raw_scores), max(raw_scores)
-        denom = max(max_s - min_s, 1e-9)
-        cf_score_map = {
-            r["asin"]: (r["predicted_rating"] - min_s) / denom
-            for r in cf_results
-        }
-
-    # 5. CB scores are already cosine similarities ∈ [0, 1] (normalised)
-    cb_score_map: Dict[str, float]   = {r["asin"]: r["score"] for r in cb_recommendations}
-    cb_reason_map: Dict[str, str]    = {r["asin"]: r.get("reason", "") for r in cb_recommendations}
-
-    # 6. Union of all candidate ASINs
-    all_asins = set(cf_score_map.keys()) | set(cb_score_map.keys())
-
-    # 7. Compute hybrid score for each candidate
-    scored: list = []
-    for asin in all_asins:
-        cf_s = cf_score_map.get(asin, 0.0)
-        cb_s = cb_score_map.get(asin, 0.0)
-        hybrid_s = cf_weight * cf_s + (1.0 - cf_weight) * cb_s
-
-        sources = []
-        if asin in cf_score_map:
-            sources.append("collaborative")
-        if asin in cb_score_map:
-            sources.append("content_based")
-
-        scored.append({
-            "asin":          asin,
-            "hybrid_score":  round(hybrid_s, 4),
-            "cf_score":      round(cf_s, 4),
-            "cb_score":      round(cb_s, 4),
-            "reason":        cb_reason_map.get(asin, "Recommended for you"),
-            "sources":       sources,
-        })
-
-    scored.sort(key=lambda x: x["hybrid_score"], reverse=True)
-    top_scored = scored[:top_k]
-
-    if not top_scored:
-        return {"user_id": user_id, "method": "hybrid", "products": []}
-
-    # 8. Fetch full product details
-    top_asins   = [s["asin"] for s in top_scored]
-    score_index = {s["asin"]: s for s in top_scored}
-
-    placeholders = ", ".join([f":a{i}" for i in range(len(top_asins))])
-    params = {f"a{i}": a for i, a in enumerate(top_asins)}
-    sql = text(f"SELECT * FROM amazon_products WHERE asin IN ({placeholders})")
-
-    with state["engine"].connect() as conn:
-        df = pd.read_sql(sql, conn, params=params)
-
-    products = df.fillna("N/A").to_dict(orient="records")
-    for p in products:
-        meta = score_index.get(p["asin"], {})
-        p["hybrid_score"] = meta.get("hybrid_score", 0.0)
-        p["cf_score"]     = meta.get("cf_score", 0.0)
-        p["cb_score"]     = meta.get("cb_score", 0.0)
-        p["reason"]       = meta.get("reason", "")
-        p["sources"]      = meta.get("sources", [])
-
-    products.sort(key=lambda p: p["hybrid_score"], reverse=True)
-
-    return {
-        "user_id":   user_id,
-        "method":    "hybrid",
-        "cf_weight": cf_weight,
-        "cb_weight": round(1.0 - cf_weight, 2),
-        "total":     len(products),
-        "products":  products,
-    }
 
 
 # ── Run ────────────────────────────────────────────────────────────────────────
