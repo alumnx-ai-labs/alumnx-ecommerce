@@ -1,5 +1,3 @@
-import os
-print(f"DEBUG: Executing api.py from: {os.path.abspath(__file__)}")
 """
 FastAPI Amazon Product API (Recommendation Engine Removed)
 
@@ -56,7 +54,9 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 # ── Helper: Run SQL and return DataFrame ───────────────────────────────────────
 
-def query_db(sql: str, params: dict = {}) -> pd.DataFrame:
+def query_db(sql: str, params: dict = None) -> pd.DataFrame:
+    if params is None:
+        params = {}
     with state["engine"].connect() as conn:
         return pd.read_sql(text(sql), conn, params=params)
 
@@ -129,18 +129,22 @@ def get_products(
     """
     try:
         with state["engine"].connect() as conn:
+            # Get true total count for proper pagination
+            count_sql = f"SELECT COUNT(*) FROM amazon_products {where_clause}"
+            total_count = conn.execute(text(count_sql), params).scalar()
             logger.info(f"Querying products: {sql} with params {params}")
             df = pd.read_sql(text(sql), conn, params=params)
             logger.info(f"Query returned {len(df)} rows")
         return {
             "page": page,
             "limit": limit,
-            "total_results": len(df),
+            "total_count": int(total_count),
+            "total_pages": (int(total_count) + limit - 1) // limit,
             "products": df.fillna("N/A").to_dict(orient="records")
         }
     except Exception as e:
         logger.error(f"Products query failed: {e}")
-        return {"page": page, "limit": limit, "total_results": 0, "products": []}
+        return {"page": page, "limit": limit, "total_count": 0, "total_pages": 0, "products": []}
 
 @app.get("/products/{asin}", tags=["Products"])
 def get_product(asin: str):
@@ -238,6 +242,7 @@ def get_user_profile(user_id: int):
         LEFT JOIN amazon_categories c ON p.category_id = c.id
         WHERE r.user_id = :uid
         ORDER BY r.rating DESC
+        LIMIT 500
     """, {"uid": user_id})
 
     return {
