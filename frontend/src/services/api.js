@@ -98,20 +98,6 @@ export const UserService = {
     return res.json();
   },
 
-  getHybridRecommendations: async (userId, topK = 10, timeoutMs = 20000) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(
-        `${API_BASE}/users/${userId}/recommendations/hybrid?top_k=${topK}`,
-        { signal: controller.signal },
-      );
-      if (!res.ok) throw new Error("Failed to fetch hybrid recommendations");
-      return res.json();
-    } finally {
-      clearTimeout(timer);
-    }
-  },
 
   getCollaborativeRecommendations: async (userId, topK = 10) => {
     const res = await fetch(

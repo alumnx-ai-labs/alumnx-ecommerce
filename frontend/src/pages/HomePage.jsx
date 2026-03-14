@@ -55,7 +55,7 @@ export default function HomePage() {
     window.scrollTo(0, 0);
   }, [search, currentPage]);
 
-  // ── Fetch hybrid recommendations (only on home page, not search) ──
+  // ── Fetch personalized recommendations (Collaborative Filtering) ──
   useEffect(() => {
     if (search) return;
 
