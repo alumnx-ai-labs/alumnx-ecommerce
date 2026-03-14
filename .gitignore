@@ -1,7 +1,42 @@
+# General
+.DS_Store
 .env
-venv/
+.env.local
+.env.*.local
+*.log
+*.sqlite
+.vscode/
+.idea/
+
+# Backend & AI Service
 __pycache__/
+*.py[cod]
+*$py.class
+venv/
+my_venv/
+venv_ai/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Data
 *.csv
 amazon_products.csv
 amazon_categories.csv
-node_modules
+
+# Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+.npm
+.eslintcache
+
+# Production Config
+backend/backend.log
+ai_service/service.log
+backend/venv/
+ai_service/venv/
+ai_service/my_venv/
+ai_service/venv_ai/
